@@ -15,6 +15,7 @@ import (
 	"math/big"
 	"os"
 	"strconv"
+	"strings"
 )
 
 const addr = "192.168.0.148:4242"
@@ -64,15 +65,36 @@ func main() {
 	manifest_path := "manifest.json"
 	chunks := read_json_as_chunks(manifest_path)
 	for index, chunk := range chunks {
-		fmt.Println("Fetching" + chunk.Filename)
+		fmt.Println("Fetching " + chunk.Filename)
 		err := clientMain(chunk.Filename)
 		if err != nil {
 			//panic(err)
 			fmt.Println(err.Error())
 		}
 		fmt.Println("Fetched")
+		fmt.Println()
 		log.Println("Chunk " + strconv.Itoa(index) + " arrived.")
 	}
+}
+
+func receive_one(full_path string, stream quic.Stream) (int64, error) {
+	f, err := os.Create(full_path)
+	if err != nil {
+		fmt.Println("Failed to create file on local path")
+		panic(err)
+	}
+	defer f.Close()
+	fmt.Println("Start receiving")
+	bufferFileSize := make([]byte, 10)
+	stream.Read(bufferFileSize)
+	content_length, _ := strconv.ParseInt(strings.Trim(string(bufferFileSize), ":"), 10, 64)
+	fmt.Println("Get header(Content-Length):" + strconv.FormatInt(content_length, 10))
+	n, err := io.CopyN(f, stream, content_length)
+	fmt.Println("Finished receiving, recv bytes:" + strconv.FormatInt(n, 10))
+	if err != nil {
+		fmt.Println(err.Error())
+	}
+	return n, err
 }
 
 func clientMain(filename string) error {
@@ -89,27 +111,19 @@ func clientMain(filename string) error {
 	if err != nil {
 		return err
 	}
-
+	//sending the request filename
 	fmt.Printf("Client: Sending '%s'\n", filename)
 	_, err = stream.Write([]byte(filename))
 	if err != nil {
 		return err
 	}
 	full_path := "D:\\" + filename
-	f, err := os.Create(full_path)
+	//receiving the file from the QUIC server
+	_, err = receive_one(full_path, stream)
 	if err != nil {
-		fmt.Println("1")
-		panic(err)
+		//panic(err)
 	}
-	defer f.Close()
-	fmt.Println("x")
-	n, err := io.Copy(f, stream)
-	fmt.Println("y")
-	if err != nil {
-		fmt.Println("1")
-		return err
-	}
-	fmt.Println("Received:" + string(n))
+	//received
 	fmt.Printf("Finished saving...")
 	return nil
 }
