@@ -6,26 +6,72 @@ import (
 	"crypto/rsa"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/json"
 	"encoding/pem"
 	"fmt"
+	quic "github.com/lucas-clemente/quic-go"
 	"io"
+	"log"
 	"math/big"
 	"os"
-
-	quic "github.com/lucas-clemente/quic-go"
+	"strconv"
 )
 
-const addr = "192.168.0.125:4242"
+const addr = "192.168.0.148:4242"
 
-const message = "loot_vox10_1000.ply"
+const message = "loot_vox10_1002.ply"
+
+//用户
+type Chunk struct {
+	Filename string `json:"filename"`
+}
+
+func read_json_as_chunks(path string) []Chunk {
+	var chunks []Chunk
+	f, err := os.Open(path)
+	if err != nil {
+		panic(err)
+	}
+	defer f.Close()
+	decoder := json.NewDecoder(f)
+	err = decoder.Decode(&chunks)
+	if err != nil {
+		fmt.Println("Manifest Deocoding Failed", err.Error())
+	} else {
+		fmt.Println("Manifest Decoding Suceeded")
+	}
+	return chunks
+}
+
+//logger
+func log_init(log_path string) {
+	logFile, err := os.OpenFile(log_path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		fmt.Println("open log file failed, err:", err)
+		return
+	}
+	log.SetOutput(logFile)
+	log.SetFlags(log.Llongfile | log.Lmicroseconds | log.Ldate)
+	log.SetPrefix("[PS]")
+}
 
 // We start a server echoing data on the first stream the client opens,
 // then connect with a client, send the message, and wait for its receipt.
 func main() {
+	log_path := "stall_timing.log"
+	log_init(log_path)
 	//go func() { log.Fatal(echoServer()) }()
-	err := clientMain(message)
-	if err != nil {
-		panic(err)
+	manifest_path := "manifest.json"
+	chunks := read_json_as_chunks(manifest_path)
+	for index, chunk := range chunks {
+		fmt.Println("Fetching" + chunk.Filename)
+		err := clientMain(chunk.Filename)
+		if err != nil {
+			//panic(err)
+			fmt.Println(err.Error())
+		}
+		fmt.Println("Fetched")
+		log.Println("Chunk " + strconv.Itoa(index) + " arrived.")
 	}
 }
 
@@ -49,7 +95,8 @@ func clientMain(filename string) error {
 	if err != nil {
 		return err
 	}
-	f, err := os.Create(filename)
+	full_path := "D:\\" + filename
+	f, err := os.Create(full_path)
 	if err != nil {
 		fmt.Println("1")
 		panic(err)
@@ -60,7 +107,7 @@ func clientMain(filename string) error {
 	fmt.Println("y")
 	if err != nil {
 		fmt.Println("1")
-		panic(err)
+		return err
 	}
 	fmt.Println("Received:" + string(n))
 	fmt.Printf("Finished saving...")
