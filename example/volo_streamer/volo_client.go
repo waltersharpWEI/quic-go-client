@@ -20,7 +20,7 @@ import (
 
 const addr = "192.168.0.148:4242"
 
-const message = "loot_vox10_1002.ply"
+const message = "Mesh-F0001.ply"
 
 //用户
 type Chunk struct {
@@ -64,9 +64,22 @@ func main() {
 	//go func() { log.Fatal(echoServer()) }()
 	manifest_path := "manifest.json"
 	chunks := read_json_as_chunks(manifest_path)
+	tlsConf := &tls.Config{
+		InsecureSkipVerify: true,
+		NextProtos:         []string{"quic-echo-example"},
+	}
+	session, err := quic.DialAddr(addr, tlsConf, nil)
+	if err != nil {
+		panic(err)
+	}
+	stream, err := session.OpenStreamSync(context.Background())
+	if err != nil {
+		panic(err)
+	}
+	//sending the request filename
 	for index, chunk := range chunks {
 		fmt.Println("Fetching " + chunk.Filename)
-		err := clientMain(chunk.Filename)
+		err := clientMain(stream, chunk.Filename)
 		if err != nil {
 			//panic(err)
 			fmt.Println(err.Error())
@@ -97,31 +110,18 @@ func receive_one(full_path string, stream quic.Stream) (int64, error) {
 	return n, err
 }
 
-func clientMain(filename string) error {
-	tlsConf := &tls.Config{
-		InsecureSkipVerify: true,
-		NextProtos:         []string{"quic-echo-example"},
-	}
-	session, err := quic.DialAddr(addr, tlsConf, nil)
-	if err != nil {
-		return err
-	}
-
-	stream, err := session.OpenStreamSync(context.Background())
-	if err != nil {
-		return err
-	}
-	//sending the request filename
+func clientMain(stream quic.Stream, filename string) error {
 	fmt.Printf("Client: Sending '%s'\n", filename)
-	_, err = stream.Write([]byte(filename))
+	_, err := stream.Write([]byte(filename))
 	if err != nil {
 		return err
 	}
-	full_path := "D:\\" + filename
+	//full_path := "D:\\" + filename
+	full_path := filename
 	//receiving the file from the QUIC server
 	_, err = receive_one(full_path, stream)
 	if err != nil {
-		//panic(err)
+		return err
 	}
 	//received
 	fmt.Printf("Finished saving...")
