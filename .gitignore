@@ -5,6 +5,7 @@ mockgen_tmp.go
 *.qtr
 *.qlog
 *.txt
+*.ply
 race.[0-9]*
 
 fuzzing/*/*.zip
@@ -15,3 +16,4 @@ fuzzing/*/suppressions
 fuzzing/*/corpus/
 
 gomock_reflect_*/
+/example/volo_streamer/
